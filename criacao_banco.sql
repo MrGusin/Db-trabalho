@@ -6,18 +6,63 @@
 -- ================================================================
 -- ▌ PARTE 0 — CRIAÇÃO DO BANCO E SCHEMA
 -- ================================================================
--- Este bloco precisa ser executado conectado a outro banco
--- (ex: postgres), pois não é possível criar o banco "delivery"
--- estando conectado a ele mesmo (ele ainda não existe).
--- Execute este script via: psql -U seu_usuario -d postgres -f criacao_banco.sql
--- Atenção: o Postgres não suporta "CREATE DATABASE IF NOT EXISTS",
--- então este script só roda sem erro se o banco "delivery" ainda não existir.
 
-CREATE DATABASE delivery;
+-- Bloco PL/pgSQL para remover dependências locais das roles com segurança se existirem
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'role_dba') THEN
+        EXECUTE 'DROP OWNED BY role_dba;';
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'role_cliente') THEN
+        EXECUTE 'DROP OWNED BY role_cliente;';
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'role_restaurante') THEN
+        EXECUTE 'DROP OWNED BY role_restaurante;';
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'role_entregador') THEN
+        EXECUTE 'DROP OWNED BY role_entregador;';
+    END IF;
+END;
+$$;
 
--- Comando de meta do psql: troca a conexão atual para o banco recém-criado.
--- Tudo que vier depois desta linha já roda dentro do banco "delivery".
-\c delivery
+-- Remove usuários antigos se existirem
+DROP USER IF EXISTS usuario_dba;
+DROP USER IF EXISTS usuario_cliente;
+DROP USER IF EXISTS usuario_restaurante;
+DROP USER IF EXISTS usuario_entregador;
+
+-- Remove roles antigas se existirem
+DROP ROLE IF EXISTS role_dba;
+DROP ROLE IF EXISTS role_cliente;
+DROP ROLE IF EXISTS role_restaurante;
+DROP ROLE IF EXISTS role_entregador;
+
+-- Criação das roles (sem permissão de login)
+CREATE ROLE role_dba         NOLOGIN;
+CREATE ROLE role_cliente     NOLOGIN;
+CREATE ROLE role_restaurante NOLOGIN;
+CREATE ROLE role_entregador  NOLOGIN;
+
+-- Permissões iniciais do DBA no banco e no schema
+GRANT ALL PRIVILEGES ON DATABASE delivery TO role_dba;
+GRANT USAGE, CREATE ON SCHEMA public TO role_dba;
+
+-- Configura privilégios padrão para futuros objetos criados no schema public pelo executor do script
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO role_dba;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO role_dba;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON FUNCTIONS TO role_dba;
+
+-- Criação dos usuários com permissão de login
+CREATE USER usuario_dba         WITH LOGIN PASSWORD 'senha_dba123';
+CREATE USER usuario_cliente     WITH LOGIN PASSWORD 'senha_cliente123';
+CREATE USER usuario_restaurante WITH LOGIN PASSWORD 'senha_rest456';
+CREATE USER usuario_entregador  WITH LOGIN PASSWORD 'senha_ent789';
+
+-- Associação dos usuários às suas respectivas roles
+GRANT role_dba         TO usuario_dba;
+GRANT role_cliente     TO usuario_cliente;
+GRANT role_restaurante TO usuario_restaurante;
+GRANT role_entregador  TO usuario_entregador;
 
 -- O schema "public" já existe por padrão em todo banco novo do Postgres,
 -- mas o comando abaixo garante que ele exista mesmo que tenha sido removido.
@@ -356,32 +401,10 @@ $$;
 -- ▌ PARTE 5 — SEGURANÇA
 -- ================================================================
 
-DROP ROLE IF EXISTS role_dba;
--- Role administrativa para manutenção da base, distinta dos usuários do negócio.
-CREATE ROLE role_dba NOLOGIN;
--- Permite ao DBA administrar a estrutura do banco e criar objetos no schema.
-GRANT ALL PRIVILEGES ON DATABASE delivery TO role_dba;
-GRANT USAGE, CREATE ON SCHEMA public TO role_dba;
--- Garante acesso administrativo aos objetos já existentes e aos que forem criados.
+-- Garante acesso administrativo aos objetos já existentes.
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO role_dba;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO role_dba;
 GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO role_dba;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO role_dba;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO role_dba;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON FUNCTIONS TO role_dba;
-
-DROP USER IF EXISTS usuario_dba;
--- Usuário de login usado pela aplicação Java ou por conexão manual administrativa.
-CREATE USER usuario_dba WITH LOGIN PASSWORD 'senha_dba123';
-GRANT role_dba TO usuario_dba;
-
-DROP ROLE IF EXISTS role_cliente;
-DROP ROLE IF EXISTS role_restaurante;
-DROP ROLE IF EXISTS role_entregador;
-
-CREATE ROLE role_cliente     NOLOGIN;
-CREATE ROLE role_restaurante NOLOGIN;
-CREATE ROLE role_entregador  NOLOGIN;
 
 
 GRANT SELECT ON cardapio_online TO role_cliente;
@@ -417,38 +440,54 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON produto   TO role_restaurante;
 GRANT INSERT, SELECT                 ON pagamento TO role_cliente;
 GRANT SELECT                         ON pagamento TO role_restaurante;
 
-DROP USER IF EXISTS usuario_cliente;
-DROP USER IF EXISTS usuario_restaurante;
-DROP USER IF EXISTS usuario_entregador;
-
-CREATE USER usuario_cliente     WITH LOGIN PASSWORD 'senha_cliente123';
-CREATE USER usuario_restaurante WITH LOGIN PASSWORD 'senha_rest456';
-CREATE USER usuario_entregador  WITH LOGIN PASSWORD 'senha_ent789';
-
-GRANT role_cliente     TO usuario_cliente;
-GRANT role_restaurante TO usuario_restaurante;
-GRANT role_entregador  TO usuario_entregador;
 
 ALTER TABLE pedido ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY politica_cliente_pedido
-    ON pedido FOR SELECT, INSERT, UPDATE TO role_cliente
+-- Remove as políticas antigas se existirem para evitar conflitos ao reexecutar
+DROP POLICY IF EXISTS politica_cliente_pedido ON pedido;
+DROP POLICY IF EXISTS politica_restaurante_pedido ON pedido;
+DROP POLICY IF EXISTS politica_entregador_pedido ON pedido;
+DROP POLICY IF EXISTS politica_cliente_pedido_select ON pedido;
+DROP POLICY IF EXISTS politica_cliente_pedido_insert ON pedido;
+DROP POLICY IF EXISTS politica_cliente_pedido_update ON pedido;
+DROP POLICY IF EXISTS politica_restaurante_pedido_select ON pedido;
+DROP POLICY IF EXISTS politica_restaurante_pedido_update ON pedido;
+DROP POLICY IF EXISTS politica_entregador_pedido_select ON pedido;
+DROP POLICY IF EXISTS politica_entregador_pedido_update ON pedido;
+
+-- Políticas para Cliente
+CREATE POLICY politica_cliente_pedido_select
+    ON pedido FOR SELECT TO role_cliente
+    USING (cliente_id = fn_pessoa_id_do_usuario());
+
+CREATE POLICY politica_cliente_pedido_insert
+    ON pedido FOR INSERT TO role_cliente
+    WITH CHECK (cliente_id = fn_pessoa_id_do_usuario());
+
+CREATE POLICY politica_cliente_pedido_update
+    ON pedido FOR UPDATE TO role_cliente
     USING (cliente_id = fn_pessoa_id_do_usuario())
     WITH CHECK (cliente_id = fn_pessoa_id_do_usuario());
 
-CREATE POLICY politica_restaurante_pedido
-    ON pedido FOR SELECT, UPDATE TO role_restaurante
+-- Políticas para Restaurante
+CREATE POLICY politica_restaurante_pedido_select
+    ON pedido FOR SELECT TO role_restaurante
+    USING (restaurante_id = fn_restaurante_id_do_usuario());
+
+CREATE POLICY politica_restaurante_pedido_update
+    ON pedido FOR UPDATE TO role_restaurante
     USING (restaurante_id = fn_restaurante_id_do_usuario())
     WITH CHECK (restaurante_id = fn_restaurante_id_do_usuario());
 
-CREATE POLICY politica_entregador_pedido
-    ON pedido FOR SELECT, UPDATE TO role_entregador
-    USING (
-        entregador_id = fn_entregador_id_do_usuario()
-    )
-    WITH CHECK (
-        entregador_id = fn_entregador_id_do_usuario()
-    );
+-- Políticas para Entregador
+CREATE POLICY politica_entregador_pedido_select
+    ON pedido FOR SELECT TO role_entregador
+    USING (entregador_id = fn_entregador_id_do_usuario());
+
+CREATE POLICY politica_entregador_pedido_update
+    ON pedido FOR UPDATE TO role_entregador
+    USING (entregador_id = fn_entregador_id_do_usuario())
+    WITH CHECK (entregador_id = fn_entregador_id_do_usuario());
 
 
 -- ================================================================
