@@ -509,3 +509,50 @@ BEGIN
     WHERE id = v_restaurante_id;
 END;
 $$;
+
+
+-- ================================================================
+-- ▌ MOMENTO 13 - EXPLAIN ANALYZE E OTIMIZACAO
+-- ================================================================
+-- Requisito: "análise de planos de execução (EXPLAIN) de pelo menos 3 consultas críticas"
+-- OBS: O primeiro EXPLAIN ANALYZE ja esta em testes_banco.sql (Momento 11B).
+--      Os dois abaixo completam os 3 exigidos pelo requisito de otimizacao.
+
+-- --------------------------------------------------------------
+-- EXPLAIN 2: Busca de entregadores disponíveis ordenados por desempenho
+-- Verifica uso do idx_entregador_disponivel e join com pessoa
+-- Esperado: Index Scan em entregador.disponivel + Nested Loop
+-- --------------------------------------------------------------
+EXPLAIN ANALYZE
+SELECT
+    e.id                AS entregador_id,
+    p.nome              AS nome_entregador,
+    e.latitude,
+    e.longitude
+FROM entregador e
+JOIN pessoa p ON p.pessoa_id = e.pessoa_id
+WHERE e.disponivel = TRUE
+ORDER BY e.id;
+
+-- --------------------------------------------------------------
+-- EXPLAIN 3: Listagem de pedidos de um cliente com status e restaurante
+-- Verifica uso de idx_pedido_cliente e idx_pedido_status
+-- Esperado: Index Scan em pedido.cliente_id, evitando full table scan
+-- --------------------------------------------------------------
+EXPLAIN ANALYZE
+SELECT
+    ped.id              AS pedido_id,
+    r.nome              AS restaurante,
+    s.status            AS status_pedido,
+    ped.valor_total,
+    ped.taxa_entrega,
+    ped.data_hora
+FROM pedido ped
+JOIN restaurante r        ON r.id = ped.restaurante_id
+JOIN status_de_pedido s   ON s.id = ped.status
+WHERE ped.cliente_id = (SELECT pessoa_id FROM pessoa WHERE cpf_cnpj = '11111111111')
+ORDER BY ped.data_hora DESC;
+
+-- Atualiza a view materializada de desempenho com CONCURRENTLY agora que ha dados
+-- (CONCURRENTLY requer que a view ja tenha sido populada ao menos uma vez, feito em criacao_banco.sql)
+REFRESH MATERIALIZED VIEW CONCURRENTLY desempenho_entregadores;

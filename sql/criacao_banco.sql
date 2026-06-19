@@ -100,7 +100,7 @@ CREATE TABLE status_pagamento (
 
 CREATE TABLE estado (
     id      SERIAL      PRIMARY KEY,
-    nome    VARCHAR(50) NOT NULL
+    nome    VARCHAR(50) NOT NULL UNIQUE
 );
 
 CREATE TABLE tipo_logradouro (
@@ -116,7 +116,8 @@ CREATE TABLE tipo_cozinha (
 CREATE TABLE cidade (
     id          SERIAL          PRIMARY KEY,
     nome        VARCHAR(100)    NOT NULL,
-    estado_id   INTEGER         NOT NULL REFERENCES estado(id)
+    estado_id   INTEGER         NOT NULL REFERENCES estado(id),
+    UNIQUE (nome, estado_id)
 );
 
 CREATE TABLE pessoa (

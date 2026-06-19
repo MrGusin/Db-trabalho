@@ -48,43 +48,37 @@ public class GerenciadorDelivery {
 
         // Exemplo 1: Pizza Margherita (Restaurante ID 1, Produto ID 1 no SQL)
         Document pizzaMargherita = new Document()
-            .append("restaurante_id_sql", 1)
-            .append("produto_id_sql", 1)
-            .append("nome", "Pizza Margherita")
-            .append("preco_base", 45.00)
-            .append("opcoes_personalizacao", Arrays.asList(
-                new Document("categoria", "Bordas")
-                    .append("opcoes", Arrays.asList(
-                        new Document("nome", "Sem Borda").append("adicional", 0.0),
-                        new Document("nome", "Borda de Catupiry").append("adicional", 5.0),
-                        new Document("nome", "Borda de Cheddar").append("adicional", 6.0)
-                    )),
-                new Document("categoria", "Ingredientes Extras")
-                    .append("opcoes", Arrays.asList(
-                        new Document("nome", "Queijo Extra").append("adicional", 4.0),
-                        new Document("nome", "Manjericão Extra").append("adicional", 2.0)
-                    ))
-            ));
+                .append("restaurante_id_sql", 1)
+                .append("produto_id_sql", 1)
+                .append("nome", "Pizza Margherita")
+                .append("preco_base", 45.00)
+                .append("opcoes_personalizacao", Arrays.asList(
+                        new Document("categoria", "Bordas")
+                                .append("opcoes", Arrays.asList(
+                                        new Document("nome", "Sem Borda").append("adicional", 0.0),
+                                        new Document("nome", "Borda de Catupiry").append("adicional", 5.0),
+                                        new Document("nome", "Borda de Cheddar").append("adicional", 6.0))),
+                        new Document("categoria", "Ingredientes Extras")
+                                .append("opcoes", Arrays.asList(
+                                        new Document("nome", "Queijo Extra").append("adicional", 4.0),
+                                        new Document("nome", "Manjericão Extra").append("adicional", 2.0)))));
 
         // Exemplo 2: Pizza Calabresa (Restaurante ID 1, Produto ID 3 no SQL)
         Document pizzaCalabresa = new Document()
-            .append("restaurante_id_sql", 1)
-            .append("produto_id_sql", 3)
-            .append("nome", "Pizza Calabresa")
-            .append("preco_base", 49.00)
-            .append("opcoes_personalizacao", Arrays.asList(
-                new Document("categoria", "Bordas")
-                    .append("opcoes", Arrays.asList(
-                        new Document("nome", "Sem Borda").append("adicional", 0.0),
-                        new Document("nome", "Borda de Catupiry").append("adicional", 5.0),
-                        new Document("nome", "Borda de Cheddar").append("adicional", 6.0)
-                    )),
-                new Document("categoria", "Ingredientes Extras")
-                    .append("opcoes", Arrays.asList(
-                        new Document("nome", "Calabresa Extra").append("adicional", 5.0),
-                        new Document("nome", "Cebola Extra").append("adicional", 1.0)
-                    ))
-            ));
+                .append("restaurante_id_sql", 1)
+                .append("produto_id_sql", 3)
+                .append("nome", "Pizza Calabresa")
+                .append("preco_base", 49.00)
+                .append("opcoes_personalizacao", Arrays.asList(
+                        new Document("categoria", "Bordas")
+                                .append("opcoes", Arrays.asList(
+                                        new Document("nome", "Sem Borda").append("adicional", 0.0),
+                                        new Document("nome", "Borda de Catupiry").append("adicional", 5.0),
+                                        new Document("nome", "Borda de Cheddar").append("adicional", 6.0))),
+                        new Document("categoria", "Ingredientes Extras")
+                                .append("opcoes", Arrays.asList(
+                                        new Document("nome", "Calabresa Extra").append("adicional", 5.0),
+                                        new Document("nome", "Cebola Extra").append("adicional", 1.0)))));
 
         colecaoCardapio.insertOne(pizzaMargherita);
         colecaoCardapio.insertOne(pizzaCalabresa);
@@ -93,27 +87,28 @@ public class GerenciadorDelivery {
     }
 
     /**
-     * Requisito: "integração onde o pedido relacional referência o documento do item do cardápio"
+     * Requisito: "integração onde o pedido relacional referência o documento do
+     * item do cardápio"
      * Cria um pedido híbrido.
      */
     public void criarPedidoHibrido(int clienteId, int restauranteId, int produtoId, int quantidade,
-                                   List<Document> opcoesEscolhidas, String observacao) {
-        
+            List<Document> opcoesEscolhidas, String observacao) {
+
         System.out.println("\n--- Iniciando criacao de pedido hibrido ---");
 
         // 1. Salvar personalizações no MongoDB (pedido_itens_customizados)
         MongoCollection<Document> colecaoCustomizados = bancoMongo.getCollection("pedido_itens_customizados");
-        
+
         double valorAdicionais = 0.0;
         for (Document opcao : opcoesEscolhidas) {
             valorAdicionais += opcao.getDouble("adicional");
         }
 
         Document customizacaoDoc = new Document()
-            .append("produto_id_sql", produtoId)
-            .append("opcoes_escolhidas", opcoesEscolhidas)
-            .append("observacao", observacao)
-            .append("total_adicionais", valorAdicionais);
+                .append("produto_id_sql", produtoId)
+                .append("opcoes_escolhidas", opcoesEscolhidas)
+                .append("observacao", observacao)
+                .append("total_adicionais", valorAdicionais);
 
         colecaoCustomizados.insertOne(customizacaoDoc);
         ObjectId mongoId = customizacaoDoc.getObjectId("_id");
@@ -143,9 +138,11 @@ public class GerenciadorDelivery {
 
             // Inserir registro de pedido (Pendente)
             int pedidoId = -1;
-            String sqlPedido = "INSERT INTO pedido (cliente_id, restaurante_id, status, data_hora, taxa_entrega, valor_total) " +
-                               "VALUES (?, ?, (SELECT id FROM status_de_pedido WHERE status = 'Pendente' LIMIT 1), NOW(), NULL, ?) " +
-                               "RETURNING id";
+            String sqlPedido = "INSERT INTO pedido (cliente_id, restaurante_id, status, data_hora, taxa_entrega, valor_total) "
+                    +
+                    "VALUES (?, ?, (SELECT id FROM status_de_pedido WHERE status = 'Pendente' LIMIT 1), NOW(), NULL, ?) "
+                    +
+                    "RETURNING id";
             try (PreparedStatement psPedido = conexaoSql.prepareStatement(sqlPedido)) {
                 psPedido.setInt(1, clienteId);
                 psPedido.setInt(2, restauranteId);
@@ -197,8 +194,8 @@ public class GerenciadorDelivery {
 
             // Inserir registro de pagamento pendente
             String sqlPagamento = "INSERT INTO pagamento (pedido_id, metodo_id, status_id) " +
-                                  "VALUES (?, (SELECT id FROM metodo_pagamento WHERE metodo = 'Pix' LIMIT 1), " +
-                                  "(SELECT id FROM status_pagamento WHERE status = 'Pendente' LIMIT 1))";
+                    "VALUES (?, (SELECT id FROM metodo_pagamento WHERE metodo = 'Pix' LIMIT 1), " +
+                    "(SELECT id FROM status_pagamento WHERE status = 'Pendente' LIMIT 1))";
             try (PreparedStatement psPag = conexaoSql.prepareStatement(sqlPagamento)) {
                 psPag.setInt(1, pedidoId);
                 psPag.executeUpdate();
@@ -220,19 +217,35 @@ public class GerenciadorDelivery {
             // Em caso de erro, rollback completo das alterações relacionais
             try {
                 conexaoSql.rollback();
-                System.err.println("[ROLLBACK] Erro durante gravacao do pedido relacional. Rollback executado: " + e.getMessage());
-            } catch (SQLException ex) {
+                // Verifica se o erro foi causado pela trigger de restaurante fechado (SQLState
+                // P0001)
+                if (e instanceof java.sql.SQLException) {
+                    java.sql.SQLException sqlEx = (java.sql.SQLException) e;
+                    if ("P0001".equals(sqlEx.getSQLState())) {
+                        System.err.println("[ERRO] Pedido bloqueado: o restaurante esta fechado no momento.");
+                        System.err.println("       Aguarde o restaurante abrir e tente novamente.");
+                    } else {
+                        System.err.println("[ROLLBACK] Erro durante gravacao do pedido relacional. Rollback executado: "
+                                + e.getMessage());
+                    }
+                } else {
+                    System.err.println("[ROLLBACK] Erro durante gravacao do pedido relacional. Rollback executado: "
+                            + e.getMessage());
+                }
+            } catch (java.sql.SQLException ex) {
                 System.err.println("Erro ao executar rollback: " + ex.getMessage());
             }
-            
-            // O MongoDB não suporta rollback de escrita simples sem réplica configurada para transações,
-            // mas como boa prática, podemos remover o documento de customização NoSQL caso o SQL falhe.
+
+            // O MongoDB não suporta rollback de escrita simples sem réplica configurada
+            // para transações,
+            // mas como boa prática, podemos remover o documento de customização NoSQL caso
+            // o SQL falhe.
             colecaoCustomizados.deleteOne(Filters.eq("_id", mongoId));
             System.err.println("[MongoDB] Documento de customizacao NoSQL deletado devido a falha relacional.");
         } finally {
             try {
                 conexaoSql.setAutoCommit(true);
-            } catch (SQLException e) {
+            } catch (java.sql.SQLException e) {
                 System.err.println("Erro ao redefinir auto-commit: " + e.getMessage());
             }
         }
@@ -242,25 +255,28 @@ public class GerenciadorDelivery {
      * Requisito: "NoSQL para avaliações com fotos (documentos)"
      * Salva uma avaliação com array de caminhos/URLs de fotos no MongoDB.
      */
-    public void inserirAvaliacaoComFotos(int restauranteId, int clienteId, String nomeCliente, double nota, String comentario, List<String> caminhosFotos) {
+    public void inserirAvaliacaoComFotos(int restauranteId, int clienteId, String nomeCliente, double nota,
+            String comentario, List<String> caminhosFotos) {
         MongoCollection<Document> colecaoAvaliacoes = bancoMongo.getCollection("avaliacoes");
-        
+
         Document avaliacao = new Document()
-            .append("restaurante_id_sql", restauranteId)
-            .append("cliente_id_sql", clienteId)
-            .append("cliente_nome", nomeCliente)
-            .append("nota", nota)
-            .append("comentario", comentario)
-            .append("fotos", caminhosFotos)
-            .append("data_avaliacao", new Date());
+                .append("restaurante_id_sql", restauranteId)
+                .append("cliente_id_sql", clienteId)
+                .append("cliente_nome", nomeCliente)
+                .append("nota", nota)
+                .append("comentario", comentario)
+                .append("fotos", caminhosFotos)
+                .append("data_avaliacao", new Date());
 
         colecaoAvaliacoes.insertOne(avaliacao);
-        System.out.println("[MongoDB] Avaliacao inserida para o Restaurante " + restauranteId + " com " + caminhosFotos.size() + " foto(s)!");
+        System.out.println("[MongoDB] Avaliacao inserida para o Restaurante " + restauranteId + " com "
+                + caminhosFotos.size() + " foto(s)!");
     }
 
     /**
      * Requisito: "aggregation para nota média"
-     * Executa o framework de Aggregation do MongoDB para obter a nota média de um restaurante.
+     * Executa o framework de Aggregation do MongoDB para obter a nota média de um
+     * restaurante.
      */
     public double obterNotaMediaRestaurante(int restauranteId) {
         MongoCollection<Document> colecaoAvaliacoes = bancoMongo.getCollection("avaliacoes");
@@ -269,9 +285,9 @@ public class GerenciadorDelivery {
         // 1. Filtrar pelo restaurante ($match)
         // 2. Agrupar e calcular a média ($group com $avg)
         List<Document> resultado = colecaoAvaliacoes.aggregate(Arrays.asList(
-            Aggregates.match(Filters.eq("restaurante_id_sql", restauranteId)),
-            Aggregates.group("$restaurante_id_sql", Accumulators.avg("notaMedia", "$nota"))
-        )).into(new ArrayList<>());
+                Aggregates.match(Filters.eq("restaurante_id_sql", restauranteId)),
+                Aggregates.group("$restaurante_id_sql", Accumulators.avg("notaMedia", "$nota"))))
+                .into(new ArrayList<>());
 
         if (!resultado.isEmpty()) {
             return resultado.get(0).getDouble("notaMedia");
@@ -285,24 +301,27 @@ public class GerenciadorDelivery {
      */
     public void listarPedidosComDetalhes() {
         String sql = "SELECT p.id AS pedido_id, pes.nome AS cliente, r.nome AS restaurante, " +
-                     "pi.quantidade, pr.nome AS produto, pi.mongodb_item_id, p.valor_total, s.status " +
-                     "FROM pedido p " +
-                     "JOIN pessoa pes ON pes.pessoa_id = p.cliente_id " +
-                     "JOIN restaurante r ON r.id = p.restaurante_id " +
-                     "JOIN pedido_itens pi ON pi.pedido_id = p.id " +
-                     "JOIN produto pr ON pr.id = pi.produto_id " +
-                     "JOIN status_de_pedido s ON s.id = p.status " +
-                     "ORDER BY p.id DESC";
+                "pi.quantidade, pr.nome AS produto, pi.mongodb_item_id, p.valor_total, s.status " +
+                "FROM pedido p " +
+                "JOIN pessoa pes ON pes.pessoa_id = p.cliente_id " +
+                "JOIN restaurante r ON r.id = p.restaurante_id " +
+                "JOIN pedido_itens pi ON pi.pedido_id = p.id " +
+                "JOIN produto pr ON pr.id = pi.produto_id " +
+                "JOIN status_de_pedido s ON s.id = p.status " +
+                "ORDER BY p.id DESC";
 
         MongoCollection<Document> colecaoCustomizados = bancoMongo.getCollection("pedido_itens_customizados");
 
         try (Statement stmt = conexaoSql.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+                ResultSet rs = stmt.executeQuery(sql)) {
 
-            System.out.println("\n=========================================================================================");
-            System.out.println("                 LISTAGEM INTEGRADA DE PEDIDOS (POSTGRESQL + MONGODB)                    ");
-            System.out.println("=========================================================================================");
-            
+            System.out.println(
+                    "\n=========================================================================================");
+            System.out.println(
+                    "                 LISTAGEM INTEGRADA DE PEDIDOS (POSTGRESQL + MONGODB)                    ");
+            System.out.println(
+                    "=========================================================================================");
+
             boolean temPedidos = false;
             while (rs.next()) {
                 temPedidos = true;
@@ -341,7 +360,8 @@ public class GerenciadorDelivery {
                 } else {
                     System.out.println("  -> Sem customizacoes (Item Simples).");
                 }
-                System.out.println("-----------------------------------------------------------------------------------------");
+                System.out.println(
+                        "-----------------------------------------------------------------------------------------");
             }
             if (!temPedidos) {
                 System.out.println("Nenhum pedido cadastrado no momento.");

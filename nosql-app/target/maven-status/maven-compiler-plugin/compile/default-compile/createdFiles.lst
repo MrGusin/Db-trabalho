@@ -1,0 +1,3 @@
+com\delivery\nosql\GerenciadorDelivery.class
+com\delivery\nosql\ConexaoBanco.class
+com\delivery\nosql\Main.class

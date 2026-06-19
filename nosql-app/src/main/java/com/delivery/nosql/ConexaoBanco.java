@@ -51,8 +51,7 @@ public class ConexaoBanco {
         if (mongoClient == null) {
             try {
                 // Conecta usando o driver MongoDB moderno com autenticação
-        String connectionString = String.format("mongodb://%s:%s@%s:%d/?authSource=%s",
-                MONGO_USER, MONGO_PASS, MONGO_HOST, MONGO_PORT, MONGO_AUTH_DB);
+        String connectionString = "mongodb://localhost:27017";
         mongoClient = MongoClients.create(connectionString);
         // Opcional: validar conexão com ping
         mongoClient.getDatabase(MONGO_DB_NAME).runCommand(new org.bson.Document("ping", 1));
