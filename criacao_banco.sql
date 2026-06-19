@@ -4,6 +4,26 @@
 -- ============================================================
 
 -- ================================================================
+-- ▌ PARTE 0 — CRIAÇÃO DO BANCO E SCHEMA
+-- ================================================================
+-- Este bloco precisa ser executado conectado a outro banco
+-- (ex: postgres), pois não é possível criar o banco "delivery"
+-- estando conectado a ele mesmo (ele ainda não existe).
+-- Execute este script via: psql -U seu_usuario -d postgres -f criacao_banco.sql
+-- Atenção: o Postgres não suporta "CREATE DATABASE IF NOT EXISTS",
+-- então este script só roda sem erro se o banco "delivery" ainda não existir.
+
+CREATE DATABASE delivery;
+
+-- Comando de meta do psql: troca a conexão atual para o banco recém-criado.
+-- Tudo que vier depois desta linha já roda dentro do banco "delivery".
+\c delivery
+
+-- O schema "public" já existe por padrão em todo banco novo do Postgres,
+-- mas o comando abaixo garante que ele exista mesmo que tenha sido removido.
+CREATE SCHEMA IF NOT EXISTS public;
+
+-- ================================================================
 -- ▌ PARTE 1 — SCHEMA (Estrutura do banco)
 -- ================================================================
 
@@ -123,10 +143,11 @@ CREATE TABLE pedido (
 );
 
 CREATE TABLE pedido_itens (
-    id          SERIAL  PRIMARY KEY,
-    pedido_id   INTEGER NOT NULL REFERENCES pedido(id),
-    produto_id  INTEGER NOT NULL REFERENCES produto(id),
-    quantidade  INTEGER NOT NULL
+    id              SERIAL  PRIMARY KEY,
+    pedido_id       INTEGER NOT NULL REFERENCES pedido(id),
+    produto_id      INTEGER NOT NULL REFERENCES produto(id),
+    quantidade      INTEGER NOT NULL,
+    mongodb_item_id VARCHAR(24)
 );
 
 CREATE TABLE pagamento (
