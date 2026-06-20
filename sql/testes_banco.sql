@@ -1,10 +1,10 @@
 -- ============================================================
---  SISTEMA DE DELIVERY - BANCO DE DADOS II
---  Script de testes e demonstracao do fluxo real
+-- Sistema de Delivery - Banco de Dados II
+-- Script de teste: popula o banco e mostra o fluxo todo rodando
 -- ============================================================
 
 -- ================================================================
--- ▌ MOMENTO 1 - CADASTRO DO DONO E DO CLIENTE
+-- MOMENTO 1 - CADASTRO DO DONO E DO CLIENTE
 -- ================================================================
 
 DO $$
@@ -31,7 +31,7 @@ $$;
 
 
 -- ================================================================
--- ▌ MOMENTO 2 - CADASTRO DO ENTREGADOR
+-- MOMENTO 2 - CADASTRO DO ENTREGADOR
 -- ================================================================
 
 DO $$
@@ -54,7 +54,7 @@ $$;
 
 
 -- ================================================================
--- ▌ MOMENTO 3 - ENDERECO DO DONO DO RESTAURANTE
+-- MOMENTO 3 - ENDERECO DO DONO DO RESTAURANTE
 -- ================================================================
 
 DO $$
@@ -98,7 +98,7 @@ $$;
 
 
 -- ================================================================
--- ▌ MOMENTO 4 - ENDERECO DO CLIENTE
+-- MOMENTO 4 - ENDERECO DO CLIENTE
 -- ================================================================
 
 DO $$
@@ -134,7 +134,7 @@ $$;
 
 
 -- ================================================================
--- ▌ MOMENTO 5 - CADASTRO DO RESTAURANTE
+-- MOMENTO 5 - CADASTRO DO RESTAURANTE
 -- ================================================================
 
 DO $$
@@ -158,7 +158,7 @@ $$;
 
 
 -- ================================================================
--- ▌ MOMENTO 6 - CADASTRO DOS PRODUTOS
+-- MOMENTO 6 - CADASTRO DOS PRODUTOS
 -- ================================================================
 
 DO $$
@@ -193,7 +193,7 @@ $$;
 
 
 -- ================================================================
--- ▌ MOMENTO 7 - CADASTRO DOS ENTREGADORES
+-- MOMENTO 7 - CADASTRO DOS ENTREGADORES
 -- ================================================================
 
 DO $$
@@ -221,7 +221,7 @@ $$;
 
 
 -- ================================================================
--- ▌ MOMENTO 8 - CRIACAO DO PEDIDO
+-- MOMENTO 8 - CRIACAO DO PEDIDO
 -- ================================================================
 
 DO $$
@@ -304,7 +304,7 @@ $$;
 
 
 -- ================================================================
--- ▌ MOMENTO 9 - ATRIBUICAO DO ENTREGADOR
+-- MOMENTO 9 - ATRIBUICAO DO ENTREGADOR
 -- ================================================================
 
 DO $$
@@ -322,7 +322,7 @@ $$;
 
 
 -- ================================================================
--- ▌ MOMENTO 10 - EVOLUCAO DO PEDIDO E HISTORICO
+-- MOMENTO 10 - EVOLUCAO DO PEDIDO E HISTORICO
 -- ================================================================
 
 DO $$
@@ -358,7 +358,7 @@ $$;
 
 
 -- ================================================================
--- ▌ MOMENTO 11 - VALIDACOES DO FLUXO
+-- MOMENTO 11 - VALIDACOES DO FLUXO
 -- ================================================================
 
 SELECT
@@ -396,7 +396,7 @@ ORDER BY hp.id;
 
 
 -- ================================================================
--- ▌ MOMENTO 11B - TRANSACAO E SQL AVANCADO
+-- MOMENTO 11B - TRANSACAO E SQL AVANCADO
 -- ================================================================
 
 BEGIN;
@@ -474,7 +474,7 @@ COMMIT;
 
 
 -- ================================================================
--- ▌ MOMENTO 12 - TRIGGER DE BLOQUEIO
+-- MOMENTO 12 - TRIGGER DE BLOQUEIO
 -- ================================================================
 
 DO $$
@@ -512,17 +512,12 @@ $$;
 
 
 -- ================================================================
--- ▌ MOMENTO 13 - EXPLAIN ANALYZE E OTIMIZACAO
+-- MOMENTO 13 - EXPLAIN ANALYZE
 -- ================================================================
--- Requisito: "análise de planos de execução (EXPLAIN) de pelo menos 3 consultas críticas"
--- OBS: O primeiro EXPLAIN ANALYZE ja esta em testes_banco.sql (Momento 11B).
---      Os dois abaixo completam os 3 exigidos pelo requisito de otimizacao.
+-- precisa de pelo menos 3 EXPLAIN de consultas criticas (o primeiro ja ta
+-- la em cima no Momento 11B, esses dois aqui completam os 3)
 
--- --------------------------------------------------------------
--- EXPLAIN 2: Busca de entregadores disponíveis ordenados por desempenho
--- Verifica uso do idx_entregador_disponivel e join com pessoa
--- Esperado: Index Scan em entregador.disponivel + Nested Loop
--- --------------------------------------------------------------
+-- EXPLAIN 2: busca entregadores disponiveis (testa o idx_entregador_disponivel)
 EXPLAIN ANALYZE
 SELECT
     e.id                AS entregador_id,
@@ -534,11 +529,7 @@ JOIN pessoa p ON p.pessoa_id = e.pessoa_id
 WHERE e.disponivel = TRUE
 ORDER BY e.id;
 
--- --------------------------------------------------------------
--- EXPLAIN 3: Listagem de pedidos de um cliente com status e restaurante
--- Verifica uso de idx_pedido_cliente e idx_pedido_status
--- Esperado: Index Scan em pedido.cliente_id, evitando full table scan
--- --------------------------------------------------------------
+-- EXPLAIN 3: lista pedidos de um cliente (testa o idx_pedido_cliente, sem full scan)
 EXPLAIN ANALYZE
 SELECT
     ped.id              AS pedido_id,
@@ -553,6 +544,5 @@ JOIN status_de_pedido s   ON s.id = ped.status
 WHERE ped.cliente_id = (SELECT pessoa_id FROM pessoa WHERE cpf_cnpj = '11111111111')
 ORDER BY ped.data_hora DESC;
 
--- Atualiza a view materializada de desempenho com CONCURRENTLY agora que ha dados
--- (CONCURRENTLY requer que a view ja tenha sido populada ao menos uma vez, feito em criacao_banco.sql)
+-- atualiza a view materializada agora que ja tem dados
 REFRESH MATERIALIZED VIEW CONCURRENTLY desempenho_entregadores;

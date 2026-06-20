@@ -21,12 +21,8 @@ import com.mongodb.client.model.Aggregates;
 import com.mongodb.client.model.Filters;
 
 /**
- * Gerencia a lógica híbrida (PostgreSQL + MongoDB):
- * 1. Semear Cardápio Customizável (MongoDB)
- * 2. Realizar Pedido Híbrido (Gravação transacional SQL + Gravação do ID NoSQL)
- * 3. Inserir Avaliações com Fotos (MongoDB)
- * 4. Calcular Nota Média do Restaurante usando Aggregation (MongoDB)
- * 5. Listar Pedidos mostrando detalhes relacionais e NoSQL integrados
+ * Classe com as operacoes do sistema que mexem nos dois bancos juntos:
+ * semear cardapio, fazer pedido, avaliar restaurante, ver media e listar pedidos.
  */
 public class GerenciadorDelivery {
 
@@ -38,15 +34,12 @@ public class GerenciadorDelivery {
         this.bancoMongo = bancoMongo;
     }
 
-    /**
-     * Requisito: "NoSQL para cardápios com itens personalizáveis (documentos)"
-     * Limpa e semeia o cardápio de produtos customizáveis no MongoDB.
-     */
+    // limpa e cria o cardapio com itens personalizaveis no mongo
     public void semearCardapio() {
         MongoCollection<Document> colecaoCardapio = bancoMongo.getCollection("cardapios");
-        colecaoCardapio.drop(); // Limpa dados anteriores para demonstração limpa
+        colecaoCardapio.drop(); // apaga o que tinha antes pra nao duplicar
 
-        // Exemplo 1: Pizza Margherita (Restaurante ID 1, Produto ID 1 no SQL)
+        // pizza margherita (restaurante 1, produto 1 no sql)
         Document pizzaMargherita = new Document()
                 .append("restaurante_id_sql", 1)
                 .append("produto_id_sql", 1)
@@ -63,7 +56,7 @@ public class GerenciadorDelivery {
                                         new Document("nome", "Queijo Extra").append("adicional", 4.0),
                                         new Document("nome", "Manjericão Extra").append("adicional", 2.0)))));
 
-        // Exemplo 2: Pizza Calabresa (Restaurante ID 1, Produto ID 3 no SQL)
+        // pizza calabresa (restaurante 1, produto 3 no sql)
         Document pizzaCalabresa = new Document()
                 .append("restaurante_id_sql", 1)
                 .append("produto_id_sql", 3)
@@ -86,17 +79,13 @@ public class GerenciadorDelivery {
         System.out.println("[MongoDB] Cardapio semeado com itens personalizaveis!");
     }
 
-    /**
-     * Requisito: "integração onde o pedido relacional referência o documento do
-     * item do cardápio"
-     * Cria um pedido híbrido.
-     */
+    // cria um pedido novo, gravando a parte fixa no postgres e a customizacao no mongo
     public void criarPedidoHibrido(int clienteId, int restauranteId, int produtoId, int quantidade,
             List<Document> opcoesEscolhidas, String observacao) {
 
         System.out.println("\n--- Iniciando criacao de pedido hibrido ---");
 
-        // 1. Salvar personalizações no MongoDB (pedido_itens_customizados)
+        // 1. salva a customizacao no mongo primeiro
         MongoCollection<Document> colecaoCustomizados = bancoMongo.getCollection("pedido_itens_customizados");
 
         double valorAdicionais = 0.0;
@@ -115,11 +104,11 @@ public class GerenciadorDelivery {
         String mongoIdStr = mongoId.toHexString();
         System.out.println("[MongoDB] Customizacao criada com ID NoSQL: " + mongoIdStr);
 
-        // 2. Iniciar Transação ACID no PostgreSQL
+        // 2. agora comeca a transacao no postgres
         try {
             conexaoSql.setAutoCommit(false);
 
-            // Obter preço base do produto no SQL
+            // pega o preco base do produto
             double precoBase = 0.0;
             String queryPreco = "SELECT preco FROM produto WHERE id = ?";
             try (PreparedStatement psPreco = conexaoSql.prepareStatement(queryPreco)) {
@@ -133,10 +122,10 @@ public class GerenciadorDelivery {
                 }
             }
 
-            // Calcular valor total do item
+            // calcula o valor total do item (preco + adicionais) * quantidade
             double valorTotalItem = (precoBase + valorAdicionais) * quantidade;
 
-            // Inserir registro de pedido (Pendente)
+            // insere o pedido com status Pendente
             int pedidoId = -1;
             String sqlPedido = "INSERT INTO pedido (cliente_id, restaurante_id, status, data_hora, taxa_entrega, valor_total) "
                     +
@@ -165,13 +154,13 @@ public class GerenciadorDelivery {
                 psItem.setInt(1, pedidoId);
                 psItem.setInt(2, produtoId);
                 psItem.setInt(3, quantidade);
-                psItem.setString(4, mongoIdStr); // SALVA A REFERÊNCIA NOSQL AQUI!
+                psItem.setString(4, mongoIdStr); // aqui que liga com o documento do mongo
                 psItem.executeUpdate();
             }
             System.out.println("[PostgreSQL] Item do pedido inserido com link para o NoSQL.");
 
-            // Calcular Taxa de Entrega chamando a PROCEDURE SQL
-            double distanciaFakeKm = 3.5; // Distância simulada
+            // chama a procedure pra calcular a taxa de entrega
+            double distanciaFakeKm = 3.5; // distancia simulada, fixa so pra testar
             float taxaEntrega = 0.0f;
             String sqlTaxa = "CALL calcular_taxa_entrega(?, ?)";
             try (CallableStatement csTaxa = conexaoSql.prepareCall(sqlTaxa)) {
@@ -182,7 +171,7 @@ public class GerenciadorDelivery {
             }
             System.out.println("[PostgreSQL] Chamada a procedure calcular_taxa_entrega: R$ " + taxaEntrega);
 
-            // Atualizar o valor_total do pedido adicionando a taxa de entrega
+            // atualiza o pedido com a taxa e o valor final
             double valorFinalPedido = valorTotalItem + taxaEntrega;
             String sqlUpdatePedido = "UPDATE pedido SET taxa_entrega = ?, valor_total = ? WHERE id = ?";
             try (PreparedStatement psUpdate = conexaoSql.prepareStatement(sqlUpdatePedido)) {
@@ -192,7 +181,7 @@ public class GerenciadorDelivery {
                 psUpdate.executeUpdate();
             }
 
-            // Inserir registro de pagamento pendente
+            // cria o pagamento como pendente
             String sqlPagamento = "INSERT INTO pagamento (pedido_id, metodo_id, status_id) " +
                     "VALUES (?, (SELECT id FROM metodo_pagamento WHERE metodo = 'Pix' LIMIT 1), " +
                     "(SELECT id FROM status_pagamento WHERE status = 'Pendente' LIMIT 1))";
@@ -201,7 +190,7 @@ public class GerenciadorDelivery {
                 psPag.executeUpdate();
             }
 
-            // Atribuir entregador automaticamente usando a PROCEDURE com CURSOR
+            // chama a procedure que escolhe o entregador mais perto (usa cursor)
             String sqlEntregador = "CALL atribuir_entregador(?)";
             try (CallableStatement csEntregador = conexaoSql.prepareCall(sqlEntregador)) {
                 csEntregador.setInt(1, pedidoId);
@@ -209,16 +198,15 @@ public class GerenciadorDelivery {
             }
             System.out.println("[PostgreSQL] Chamada a procedure atribuir_entregador com cursor executada.");
 
-            // Confirmar Transação
+            // deu tudo certo, confirma a transacao
             conexaoSql.commit();
             System.out.println("[ACID] Transacao SQL confirmada! Pedido finalizado com sucesso.");
 
         } catch (Exception e) {
-            // Em caso de erro, rollback completo das alterações relacionais
+            // deu erro em algum passo, desfaz tudo que ja tinha rodado no postgres
             try {
                 conexaoSql.rollback();
-                // Verifica se o erro foi causado pela trigger de restaurante fechado (SQLState
-                // P0001)
+                // se foi a trigger que bloqueou (restaurante fechado), mostra mensagem mais clara
                 if (e instanceof java.sql.SQLException) {
                     java.sql.SQLException sqlEx = (java.sql.SQLException) e;
                     if ("P0001".equals(sqlEx.getSQLState())) {
@@ -236,10 +224,8 @@ public class GerenciadorDelivery {
                 System.err.println("Erro ao executar rollback: " + ex.getMessage());
             }
 
-            // O MongoDB não suporta rollback de escrita simples sem réplica configurada
-            // para transações,
-            // mas como boa prática, podemos remover o documento de customização NoSQL caso
-            // o SQL falhe.
+            // o mongo nao tem rollback automatico junto com o postgres, entao
+            // se o sql falhou a gente apaga na mao o documento que tinha acabado de criar
             colecaoCustomizados.deleteOne(Filters.eq("_id", mongoId));
             System.err.println("[MongoDB] Documento de customizacao NoSQL deletado devido a falha relacional.");
         } finally {
@@ -251,10 +237,7 @@ public class GerenciadorDelivery {
         }
     }
 
-    /**
-     * Requisito: "NoSQL para avaliações com fotos (documentos)"
-     * Salva uma avaliação com array de caminhos/URLs de fotos no MongoDB.
-     */
+    // salva uma avaliacao do restaurante com nota, comentario e fotos no mongo
     public void inserirAvaliacaoComFotos(int restauranteId, int clienteId, String nomeCliente, double nota,
             String comentario, List<String> caminhosFotos) {
         MongoCollection<Document> colecaoAvaliacoes = bancoMongo.getCollection("avaliacoes");
@@ -273,17 +256,11 @@ public class GerenciadorDelivery {
                 + caminhosFotos.size() + " foto(s)!");
     }
 
-    /**
-     * Requisito: "aggregation para nota média"
-     * Executa o framework de Aggregation do MongoDB para obter a nota média de um
-     * restaurante.
-     */
+    // calcula a nota media das avaliacoes de um restaurante usando aggregation do mongo
     public double obterNotaMediaRestaurante(int restauranteId) {
         MongoCollection<Document> colecaoAvaliacoes = bancoMongo.getCollection("avaliacoes");
 
-        // Pipeline de Aggregation:
-        // 1. Filtrar pelo restaurante ($match)
-        // 2. Agrupar e calcular a média ($group com $avg)
+        // filtra pelo restaurante e tira a media das notas
         List<Document> resultado = colecaoAvaliacoes.aggregate(Arrays.asList(
                 Aggregates.match(Filters.eq("restaurante_id_sql", restauranteId)),
                 Aggregates.group("$restaurante_id_sql", Accumulators.avg("notaMedia", "$nota"))))
@@ -295,10 +272,7 @@ public class GerenciadorDelivery {
         return 0.0;
     }
 
-    /**
-     * Demonstra a leitura híbrida coerente entre os dois paradigmas.
-     * Lista os pedidos do PostgreSQL e lê as personalizações associadas no MongoDB.
-     */
+    // lista os pedidos do postgres e busca a customizacao de cada item no mongo
     public void listarPedidosComDetalhes() {
         String sql = "SELECT p.id AS pedido_id, pes.nome AS cliente, r.nome AS restaurante, " +
                 "pi.quantidade, pr.nome AS produto, pi.mongodb_item_id, p.valor_total, s.status " +
@@ -338,7 +312,7 @@ public class GerenciadorDelivery {
                         pedidoId, cliente, restaurante, status, total);
                 System.out.printf("  -> Item: %d x %s (SQL)\n", qtd, produtoName);
 
-                // Busca a customização no MongoDB caso o ID exista na coluna
+                // busca a customizacao no mongo, se o item tiver uma
                 if (mongoId != null && !mongoId.trim().isEmpty()) {
                     Document customDoc = colecaoCustomizados.find(Filters.eq("_id", new ObjectId(mongoId))).first();
                     if (customDoc != null) {

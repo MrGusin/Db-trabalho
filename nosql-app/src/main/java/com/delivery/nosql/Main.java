@@ -9,7 +9,7 @@ import org.bson.Document;
 import com.mongodb.client.MongoDatabase;
 
 /**
- * Interface por terminal (Console CLI) para interagir com a aplicação híbrida de delivery.
+ * Tela de menu no terminal pra usar o sistema de delivery.
  */
 public class Main {
 
@@ -148,7 +148,7 @@ public class Main {
         String qtdStr = scanner.nextLine();
         int quantidade = qtdStr.trim().isEmpty() ? 1 : Integer.parseInt(qtdStr);
 
-        // Customização
+        // Customizacao do item
         List<Document> opcoesEscolhidas = new ArrayList<>();
         System.out.println("\nDeseja personalizar este item? (S/N) [Padrao N]: ");
         String resposta = scanner.nextLine();
@@ -181,7 +181,7 @@ public class Main {
         System.out.print("\nObservacao do pedido: ");
         String observacao = scanner.nextLine();
 
-        // Envia para o gerenciador para executar a transação híbrida
+        // manda pro gerenciador fazer o pedido (sql + mongo)
         gerenciador.criarPedidoHibrido(clienteId, restauranteId, produtoId, quantidade, opcoesEscolhidas, observacao);
     }
 

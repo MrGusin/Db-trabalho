@@ -1,13 +1,13 @@
 -- ============================================================
---  SISTEMA DE DELIVERY — BANCO DE DADOS II
---  Script de criação e execução real do banco
+-- Sistema de Delivery - Banco de Dados II
+-- Script que cria o banco inteiro (tabelas, roles, procedures, etc)
 -- ============================================================
 
 -- ================================================================
--- ▌ PARTE 0 — CRIAÇÃO DO BANCO E SCHEMA
+-- PARTE 0 - ROLES E USUARIOS
 -- ================================================================
 
--- Bloco PL/pgSQL para remover dependências locais das roles com segurança se existirem
+-- remove as roles/usuarios antigos antes, pra poder rodar o script de novo sem dar erro
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'role_dba') THEN
@@ -69,10 +69,10 @@ GRANT role_entregador  TO usuario_entregador;
 CREATE SCHEMA IF NOT EXISTS public;
 
 -- ================================================================
--- ▌ PARTE 1 — SCHEMA (Estrutura do banco)
+-- PARTE 1 - TABELAS
 -- ================================================================
 
--- Tipos de cadastro, perfis, status e domínios
+-- tabelas auxiliares (tipos, status etc), pra nao ficar string solta no banco
 CREATE TABLE tipo_cadastro (
     id      SERIAL      PRIMARY KEY,
     tipo    VARCHAR(2)  NOT NULL
@@ -211,7 +211,7 @@ CREATE TABLE historico_pedido (
     data_alteracao      TIMESTAMP   NOT NULL DEFAULT NOW()
 );
 
--- Seeds obrigatórios
+-- seeds que o banco precisa ter desde o inicio
 INSERT INTO tipo_cadastro (tipo) VALUES ('PF'), ('PJ');
 INSERT INTO tipo_pessoa (tipo) VALUES ('Cliente'), ('Restaurante'), ('Entregador');
 
@@ -237,9 +237,10 @@ INSERT INTO tipo_cozinha (tipo) VALUES
 
 
 -- ================================================================
--- ▌ PARTE 2 — PROCEDURES, TRIGGERS E VIEWS
+-- PARTE 2 - PROCEDURES, TRIGGERS E VIEWS
 -- ================================================================
 
+-- calcula a taxa de entrega: R$3 fixo + R$1,50 por km
 CREATE OR REPLACE PROCEDURE calcular_taxa_entrega(
     IN  p_distancia_km  FLOAT,
     OUT p_taxa          FLOAT
@@ -251,6 +252,7 @@ BEGIN
 END;
 $$;
 
+-- pega o entregador disponivel mais perto do restaurante e atribui pro pedido
 CREATE OR REPLACE PROCEDURE atribuir_entregador(
     IN p_pedido_id INTEGER
 )
@@ -301,6 +303,7 @@ BEGIN
 END;
 $$;
 
+-- trigger: toda vez que o status do pedido muda, registra no historico
 CREATE OR REPLACE FUNCTION fn_registrar_historico_pedido()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -319,6 +322,7 @@ AFTER UPDATE ON pedido
 FOR EACH ROW
 EXECUTE FUNCTION fn_registrar_historico_pedido();
 
+-- trigger: nao deixa mexer no pedido se o restaurante estiver fechado
 CREATE OR REPLACE FUNCTION fn_bloquear_restaurante_fechado()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -342,6 +346,7 @@ BEFORE INSERT OR UPDATE ON pedido
 FOR EACH ROW
 EXECUTE FUNCTION fn_bloquear_restaurante_fechado();
 
+-- view do cardapio que o cliente ve (sem mostrar o custo interno do produto)
 CREATE OR REPLACE VIEW cardapio_online AS
 SELECT
     id,
@@ -351,6 +356,7 @@ SELECT
     restaurante_id
 FROM produto;
 
+-- view materializada com o desempenho de cada entregador (qtd de entregas e taxa media)
 CREATE MATERIALIZED VIEW desempenho_entregadores AS
 SELECT
     e.id                    AS entregador_id,
@@ -362,6 +368,8 @@ JOIN pessoa p       ON p.pessoa_id = e.pessoa_id
 LEFT JOIN pedido ped ON ped.entregador_id = e.id
 GROUP BY e.id, p.nome;
 
+-- essas 3 funcoes abaixo sao so pra usar nas policies de RLS la embaixo,
+-- pra pegar o id da pessoa/restaurante/entregador que esta logado
 CREATE OR REPLACE FUNCTION fn_pessoa_id_do_usuario()
 RETURNS INTEGER
 LANGUAGE sql
@@ -399,10 +407,10 @@ $$;
 
 
 -- ================================================================
--- ▌ PARTE 5 — SEGURANÇA
+-- PARTE 5 - PERMISSOES (GRANT/REVOKE)
 -- ================================================================
 
--- Garante acesso administrativo aos objetos já existentes.
+-- garante que o dba tem acesso a tudo que ja existe
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO role_dba;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO role_dba;
 GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO role_dba;
@@ -442,9 +450,10 @@ GRANT INSERT, SELECT                 ON pagamento TO role_cliente;
 GRANT SELECT                         ON pagamento TO role_restaurante;
 
 
+-- ativa RLS pra garantir que cada um so ve/mexe nos pedidos que sao dele
 ALTER TABLE pedido ENABLE ROW LEVEL SECURITY;
 
--- Remove as políticas antigas se existirem para evitar conflitos ao reexecutar
+-- remove as policies antigas antes, pra poder rodar o script de novo
 DROP POLICY IF EXISTS politica_cliente_pedido ON pedido;
 DROP POLICY IF EXISTS politica_restaurante_pedido ON pedido;
 DROP POLICY IF EXISTS politica_entregador_pedido ON pedido;
@@ -456,7 +465,7 @@ DROP POLICY IF EXISTS politica_restaurante_pedido_update ON pedido;
 DROP POLICY IF EXISTS politica_entregador_pedido_select ON pedido;
 DROP POLICY IF EXISTS politica_entregador_pedido_update ON pedido;
 
--- Políticas para Cliente
+-- politicas do cliente: so enxerga/mexe nos proprios pedidos
 CREATE POLICY politica_cliente_pedido_select
     ON pedido FOR SELECT TO role_cliente
     USING (cliente_id = fn_pessoa_id_do_usuario());
@@ -470,7 +479,7 @@ CREATE POLICY politica_cliente_pedido_update
     USING (cliente_id = fn_pessoa_id_do_usuario())
     WITH CHECK (cliente_id = fn_pessoa_id_do_usuario());
 
--- Políticas para Restaurante
+-- politicas do restaurante: so enxerga/mexe nos pedidos feitos nele
 CREATE POLICY politica_restaurante_pedido_select
     ON pedido FOR SELECT TO role_restaurante
     USING (restaurante_id = fn_restaurante_id_do_usuario());
@@ -480,7 +489,7 @@ CREATE POLICY politica_restaurante_pedido_update
     USING (restaurante_id = fn_restaurante_id_do_usuario())
     WITH CHECK (restaurante_id = fn_restaurante_id_do_usuario());
 
--- Políticas para Entregador
+-- politicas do entregador: so enxerga/mexe nos pedidos atribuidos pra ele
 CREATE POLICY politica_entregador_pedido_select
     ON pedido FOR SELECT TO role_entregador
     USING (entregador_id = fn_entregador_id_do_usuario());
@@ -492,7 +501,7 @@ CREATE POLICY politica_entregador_pedido_update
 
 
 -- ================================================================
--- ▌ PARTE 6 — ÍNDICES E OTIMIZAÇÃO
+-- PARTE 6 - INDICES
 -- ================================================================
 
 CREATE INDEX IF NOT EXISTS idx_produto_tipo
