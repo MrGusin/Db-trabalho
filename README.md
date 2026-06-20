@@ -1,5 +1,7 @@
 # Sistema de Delivery - Banco de Dados II
 
+Grupo:Alexandre, Gustavo Chicoski, Katiani, Rayane, Vinicius
+
 Trabalho da disciplina de Banco de Dados II (IFSC Canoinhas). A ideia é um sistema de delivery tipo ifood, usando **PostgreSQL** pra parte relacional (clientes, pedidos, pagamentos, etc) e **MongoDB** pra parte NoSQL (cardápio personalizável e avaliações com fotos).
 
 ## Estrutura das pastas
