@@ -64,6 +64,13 @@ GRANT role_cliente     TO usuario_cliente;
 GRANT role_restaurante TO usuario_restaurante;
 GRANT role_entregador  TO usuario_entregador;
 
+-- IMPORTANTE: BYPASSRLS nao e' herdado via "GRANT role TO usuario" (diferente
+-- de privilegios normais de tabela). Por isso precisa ser setado direto no
+-- usuario de login, senao o usuario_dba cai nas mesmas policies de RLS do
+-- cliente/restaurante/entregador e nao enxerga nem consegue inserir em
+-- "pedido" (tabela que tem RLS habilitado mais abaixo no script).
+ALTER USER usuario_dba WITH BYPASSRLS;
+
 -- O schema "public" já existe por padrão em todo banco novo do Postgres,
 -- mas o comando abaixo garante que ele exista mesmo que tenha sido removido.
 CREATE SCHEMA IF NOT EXISTS public;
@@ -370,6 +377,10 @@ GROUP BY e.id, p.nome;
 
 -- essas 3 funcoes abaixo sao so pra usar nas policies de RLS la embaixo,
 -- pra pegar o id da pessoa/restaurante/entregador que esta logado
+-- IMPORTANTE: usamos session_user (nao current_user) porque dentro de uma
+-- funcao SECURITY DEFINER o current_user vira o DONO da funcao (quem criou,
+-- ex: postgres), nao quem esta logado de verdade. session_user sempre reflete
+-- quem efetivamente conectou na sessao.
 CREATE OR REPLACE FUNCTION fn_pessoa_id_do_usuario()
 RETURNS INTEGER
 LANGUAGE sql
@@ -377,7 +388,7 @@ SECURITY DEFINER
 AS $$
     SELECT pessoa_id
     FROM pessoa
-    WHERE login_usuario = current_user
+    WHERE login_usuario = session_user
     LIMIT 1;
 $$;
 
@@ -389,7 +400,7 @@ AS $$
     SELECT r.id
     FROM restaurante r
     JOIN pessoa p ON p.pessoa_id = r.pessoa_id
-    WHERE p.login_usuario = current_user
+    WHERE p.login_usuario = session_user
     LIMIT 1;
 $$;
 
@@ -401,7 +412,7 @@ AS $$
     SELECT e.id
     FROM entregador e
     JOIN pessoa p ON p.pessoa_id = e.pessoa_id
-    WHERE p.login_usuario = current_user
+    WHERE p.login_usuario = session_user
     LIMIT 1;
 $$;
 
